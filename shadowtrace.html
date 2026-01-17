@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShadowTrace | Pelacak Lokasi via HP</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #0c0c0c 0%, #1a1a2e 50%, #16213e 100%);
+            color: #e0e0ff;
+            min-height: 100vh;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* Efek partikel latar */
+        .particles {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .particle {
+            position: absolute;
+            background: rgba(0, 255, 255, 0.3);
+            border-radius: 50%;
+            animation: float 8s infinite linear;
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0) rotate(0deg); }
+            100% { transform: translateY(-100vh) rotate(360deg); }
+        }
+
+        /* Header */
+        .header {
+            padding: 1.5rem;
+            text-align: center;
+            border-bottom: 1px solid rgba(0, 255, 255, 0.2);
+            background: rgba(10, 10, 20, 0.8);
+            backdrop-filter: blur(10px);
+        }
+
+        .logo {
+            font-size: 2.2rem;
+            background: linear-gradient(90deg, #00ffff, #ff00ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+            margin-bottom: 0.5rem;
+        }
+
+        .tagline {
+            font-size: 0.9rem;
+            opacity: 0.8;
+            letter-spacing: 2px;
+        }
+
+        /* Container utama */
+        .container {
+            max-width: 1400px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 2rem;
+        }
+
+        /* Panel kiri */
+        .control-panel {
+            background: rgba(20, 20, 35, 0.9);
+            border-radius: 15px;
+            padding: 2rem;
+            border: 1px solid rgba(0, 255, 255, 0.1);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .input-group {
+            margin-bottom: 2rem;
+        }
+
+        .input-label {
+            display: block;
+            margin-bottom: 0.8rem;
+            font-size: 1.1rem;
+            color: #80ffff;
+        }
+
+        .phone-input {
+            width: 100%;
+            padding: 1rem;
+            background: rgba(0, 20, 30, 0.7);
+            border: 1px solid #00ffff;
+            border-radius: 8px;
+            color: white;
+            font-size: 1.1rem;
+            letter-spacing: 1px;
+            transition: all 0.3s;
+        }
+
+        .phone-input:focus {
+            outline: none;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+            border-color: #ff00ff;
+        }
+
+        .track-btn {
+            width: 100%;
+            padding: 1.2rem;
+            background: linear-gradient(90deg, #ff0080, #00ccff);
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-size: 1.2rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.3s, box-shadow 0.3s;
+            margin-top: 1rem;
+            letter-spacing: 1px;
+        }
+
+        .track-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 25px rgba(255, 0, 128, 0.4);
+        }
+
+        /* Animasi loading */
+        .tracking-animation {
+            text-align: center;
+            margin: 2rem 0;
+            display: none;
+        }
+
+        .radar {
+            width: 200px;
+            height: 200px;
+            margin: 0 auto;
+            position: relative;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(0, 40, 60, 0.8) 0%, rgba(0, 0, 0, 0) 70%);
+            border: 2px solid rgba(0, 255, 255, 0.3);
+        }
+
+        .radar::before {
+            content: '';
+            position: absolute;
+            width: 50%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #00ffff);
+            top: 50%;
+            transform-origin: right;
+            animation: scan 3s infinite linear;
+            border-radius: 10px;
+        }
+
+        @keyframes scan {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Panel info */
+        .info-panel {
+            background: rgba(15, 15, 25, 0.8);
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .info-title {
+            color: #ffaa00;
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+        }
+
+        .info-item {
+            margin-bottom: 0.8rem;
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px dashed rgba(255, 255, 255, 0.1);
+            padding-bottom: 0.5rem;
+        }
+
+        /* Panel kanan - Peta */
+        .map-panel {
+            background: rgba(20, 20, 35, 0.9);
+            border-radius: 15px;
+            overflow: hidden;
+            border: 1px solid rgba(0, 255, 255, 0.1);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        #map {
+            height: 600px;
+            width: 100%;
+            border-radius: 15px;
+        }
+
+        .map-overlay {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 1rem;
+            border-radius: 10px;
+            border: 1px solid #00ffff;
+            z-index: 1000;
+        }
+
+        /* History */
+        .history-panel {
+            grid-column: 1 / -1;
+            background: rgba(20, 20, 35, 0.9);
+            border-radius: 15px;
+            padding: 2rem;
+            margin-top: 1rem;
+        }
+
+        .history-title {
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+            color: #80ff80;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .history-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 1rem;
+        }
+
+        .history-item {
+            background: rgba(0, 30, 50, 0.6);
+            padding: 1rem;
+            border-radius: 10px;
+            border-left: 4px solid #ff0080;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 2rem;
+            margin-top: 3rem;
+            border-top: 1px solid rgba(0, 255, 255, 0.2);
+            font-size: 0.9rem;
+            opacity: 0.7;
+        }
+
+        /* Responsif */
+        @media (max-width: 1024px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+            
+            #map {
+                height: 400px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Partikel latar -->
+    <div class="particles" id="particles"></div>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="logo">ðŸŒˆ ShadowTrace</div>
+        <div class="tagline">Pelacakan Lokasi Real-time via Nomor Telepon</div>
+    </header>
+
+    <!-- Container utama -->
+    <div class="container">
+        <!-- Panel kiri -->
+        <div class="control-panel">
+            <div class="input-group">
+                <label class="input-label">ðŸ“¬ Masukkan Nomor HP Target</label>
+                <input type="text" class="phone-input" id="phoneInput" 
+                       placeholder="+62 812-XXXX-XXXX" maxlength="20">
+                <button class="track-btn" id="trackBtn">
+                    ðŸ“» Mulai Pelacakan
+                </button>
+            </div>
+
+            <!-- Animasi pelacakan -->
+            <div class="tracking-animation" id="trackingAnimation">
+                <div class="radar"></div>
+                <p style="margin-top: 1rem;">Memindai sinyal... Melacak lokasi...</p>
+            </div>
+
+            <!-- Panel info -->
+            <div class="info-panel">
+                <h3 class="info-title">ðŸ”™ Informasi Target</h3>
+                <div class="info-item">
+                    <span>Nomor:</span>
+                    <span id="targetNumber">-</span>
+                </div>
+                <div class="info-item">
+                    <span>Operator:</span>
+                    <span id="targetOperator">-</span>
+                </div>
+                <div class="info-item">
+                    <span>Status:</span>
+                    <span id="targetStatus">-</span>
+                </div>
+                <div class="info-item">
+                    <span>Akurasi:</span>
+                    <span id="targetAccuracy">-</span>
+                </div>
+                <div class="info-item">
+                    <span>Terakhir Online:</span>
+                    <span id="targetLastSeen">-</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel kanan - Peta -->
+        <div class="map-panel">
+            <div class="map-overlay">
+                <strong>Lokasi Terdeteksi</strong>
+                <p id="mapLocation">Menunggu data...</p>
+            </div>
+            <div id="map"></div>
+        </div>
+
+        <!-- History -->
+        <div class="history-panel">
+            <h3 class="history-title">ðŸ’² Riwayat Pelacakan</h3>
+            <div class="history-list" id="historyList">
+                <!-- Data riwayat akan dimasukkan via JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>ShadowTrace v2.1 | Sistem Pelacakan Canggih | © 2024 Darkmasterweb Network</p>
+        <p>Gunakan dengan tanggung jawab. Data hanya bersifat simulasi.</p>
+    </footer>
+
+    <!-- Script -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Inisialisasi peta
+        const map = L.map('map').setView([-6.2088, 106.8456], 12);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '©OpenStreetMap'
+        }).addTo(map);
+
+        // Marker
+        let marker = null;
+
+        // Partikel
+        function createParticles() {
+            const particles = document.getElementById('particles');
+            for (let i = 0; i < 50; i++) {
+                const particle = document.createElement('div');
+                particle.classList.add('particle');
+                particle.style.width = Math.random() * 10 + 2 + 'px';
+                particle.style.height = particle.style.width;
+                particle.style.left = Math.random() * 100 + 'vw';
+                particle.style.animationDuration = Math.random() * 10 + 5 + 's';
+                particle.style.opacity = Math.random() * 0.5 + 0.1;
+                particles.appendChild(particle);
+            }
+        }
+
+        // Data operator acak
+        const operators = ['Telkomsel', 'XL', 'Indosat', '3', 'Smartfren'];
+        const locations = [
+            { name: "Jakarta Pusat", coords: [-6.1865, 106.8341], accuracy: "Tinggi" },
+            { name: "Bandung", coords: [-6.9175, 107.6191], accuracy: "Sedang" },
+            { name: "Surabaya", coords: [-7.2575, 112.7521], accuracy: "Tinggi" },
+            { name: "Bali", coords: [-8.4095, 115.1889], accuracy: "Rendah" },
+            { name: "Medan", coords: [3.5952, 98.6722], accuracy: "Sedang" }
+        ];
+
+        // Format nomor
+        document.getElementById('phoneInput').addEventListener('input', function(e) {
+            let value = e.target.value.replace(/\D/g, '');
+            if (value.length > 0) {
+                value = '+62 ' + value.substring(0, 4) + '-' + value.substring(4, 8) + '-' + value.substring(8, 12);
+            }
+            e.target.value = value;
+        });
+
+        // Tombol lacak
+        document.getElementById('trackBtn').addEventListener('click', function() {
+            const phoneInput = document.getElementById('phoneInput').value;
+            if (!phoneInput || phoneInput.length < 10) {
+                alert('Masukkan nomor HP yang valid!');
+                return;
+            }
+
+            // Tampilkan animasi
+            const anim = document.getElementById('trackingAnimation');
+            anim.style.display = 'block';
+
+            // Update info
+            document.getElementById('targetNumber').textContent = phoneInput;
+            document.getElementById('targetOperator').textContent = operators[Math.floor(Math.random() * operators.length)];
+            document.getElementById('targetStatus').innerHTML = '<span style="color:#00ff00">â˜… Online</span>';
+            document.getElementById('targetLastSeen').textContent = new Date().toLocaleTimeString();
+
+            // Pilih lokasi acak setelah delay
+            setTimeout(() => {
+                const loc = locations[Math.floor(Math.random() * locations.length)];
+                
+                // Update peta
+                map.setView(loc.coords, 15);
+                if (marker) map.removeLayer(marker);
+                marker = L.marker(loc.coords).addTo(map)
+                    .bindPopup(`<b>${phoneInput}</b><br>${loc.name}`)
+                    .openPopup();
+
+                // Update UI
+                document.getElementById('mapLocation').textContent = loc.name;
+                document.getElementById('targetAccuracy').textContent = loc.accuracy;
+
+                // Sembunyikan animasi
+                anim.style.display = 'none';
+
+                // Tambahkan ke riwayat
+                addToHistory(phoneInput, loc.name);
+            }, 2000);
+        });
+
+        // Tambah riwayat
+        function addToHistory(phone, location) {
+            const historyList = document.getElementById('historyList');
+            const historyItem = document.createElement('div');
+            historyItem.className = 'history-item';
+            historyItem.innerHTML = `
+                <strong>${phone}</strong><br>
+                Lokasi: ${location}<br>
+                Waktu: ${new Date().toLocaleString()}
+            `;
+            historyList.prepend(historyItem);
+        }
+
+        // Inisialisasi
+        createParticles();
+        addToHistory('+62 812-3456-7890', 'Jakarta Pusat');
+        addToHistory('+62 813-9876-5432', 'Bandung');
+    </script>
+</body>
+</html>
